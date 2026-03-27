@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>適正MH分析ダッシュボード</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #fff; font-family: 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif; color: #1a1a2e; font-size: 13px; }
+
+  /* HEADER */
+  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 60%, #0f3460 100%); padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; }
+  .header-left h1 { color: #fff; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; }
+  .header-left p { color: #a0b4d0; font-size: 11px; margin-top: 4px; }
+  .header-badge { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 4px 14px; color: #e0eaff; font-size: 11px; }
+
+  /* NAV TABS */
+  .nav { background: #fff; border-bottom: 2px solid #e8eaf0; padding: 0 28px; display: flex; gap: 0; }
+  .nav-tab { padding: 12px 20px; cursor: pointer; font-size: 12px; font-weight: 600; color: #888; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }
+  .nav-tab:hover { color: #0f3460; }
+  .nav-tab.active { color: #0f3460; border-bottom-color: #0f3460; }
+
+  /* MAIN */
+  .main { padding: 20px 28px; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* KPI CARDS */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .kpi-card { background: #fff; border: 1px solid #e8eaf0; border-radius: 10px; padding: 16px; position: relative; overflow: hidden; }
+  .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .kpi-card.blue::before { background: #3b82f6; }
+  .kpi-card.green::before { background: #10b981; }
+  .kpi-card.orange::before { background: #f59e0b; }
+  .kpi-card.red::before { background: #ef4444; }
+  .kpi-card.purple::before { background: #8b5cf6; }
+  .kpi-label { font-size: 11px; color: #888; margin-bottom: 6px; }
+  .kpi-value { font-size: 24px; font-weight: 800; color: #1a1a2e; }
+  .kpi-unit { font-size: 12px; font-weight: 400; color: #888; margin-left: 3px; }
+  .kpi-sub { font-size: 11px; color: #aaa; margin-top: 4px; }
+
+  /* SECTION TITLES */
+  .section-title { font-size: 13px; font-weight: 700; color: #1a1a2e; margin-bottom: 12px; padding-left: 10px; border-left: 3px solid #0f3460; }
+
+  /* CHART CONTAINERS */
+  .chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .chart-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .chart-box { background: #fff; border: 1px solid #e8eaf0; border-radius: 10px; padding: 16px; }
+  .chart-box.full { grid-column: 1 / -1; }
+  .chart-box canvas { max-height: 300px; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #e8eaf0; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead tr { background: #f0f4ff; }
+  th { padding: 9px 12px; text-align: right; font-weight: 700; color: #444; border-bottom: 2px solid #dce3f0; white-space: nowrap; }
+  th:first-child { text-align: left; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; text-align: right; }
+  td:first-child { text-align: left; font-weight: 600; }
+  tr:hover td { background: #f8f9ff; }
+  tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .badge-over { background: #fee2e2; color: #dc2626; }
+  .badge-under { background: #dcfce7; color: #16a34a; }
+  .badge-ok { background: #fef9c3; color: #ca8a04; }
+
+  /* ALERT TABLE */
+  .alert-box { background: #fff8f0; border: 1px solid #fed7aa; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .alert-box h4 { color: #c05621; font-size: 12px; margin-bottom: 8px; }
+  .alert-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #fed7aa22; font-size: 12px; }
+  .alert-row:last-child { border-bottom: none; }
+
+  /* STORE SELECTOR */
+  .store-select-wrap { margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+  .store-select-wrap label { font-size: 12px; font-weight: 600; color: #555; }
+  select { padding: 6px 12px; border: 1px solid #dce3f0; border-radius: 6px; font-size: 12px; color: #1a1a2e; background: #fff; cursor: pointer; }
+
+  /* RANKING */
+  .rank-list { list-style: none; }
+  .rank-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0f0f0; gap: 10px; }
+  .rank-item:last-child { border-bottom: none; }
+  .rank-num { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0; }
+  .rank-1 { background: #ffd700; color: #7a5800; }
+  .rank-2 { background: #c0c0c0; color: #555; }
+  .rank-3 { background: #cd7f32; color: #fff; }
+  .rank-other { background: #e8eaf0; color: #888; }
+  .rank-name { flex: 1; font-size: 12px; font-weight: 600; }
+  .rank-bar-wrap { width: 100px; height: 6px; background: #e8eaf0; border-radius: 3px; overflow: hidden; }
+  .rank-bar { height: 100%; border-radius: 3px; }
+  .rank-val { font-size: 12px; font-weight: 700; width: 60px; text-align: right; }
+
+  .diff-pos { color: #dc2626; font-weight: 700; }
+  .diff-neg { color: #16a34a; font-weight: 700; }
+  .diff-zero { color: #ca8a04; font-weight: 700; }
+
+  /* HEATMAP */
+  .heatmap-wrap { overflow-x: auto; }
+  .heatmap-table { border-collapse: collapse; font-size: 11px; }
+  .heatmap-table th { padding: 5px 8px; background: #f0f4ff; font-weight: 700; color: #444; white-space: nowrap; }
+  .heatmap-table td { padding: 4px 6px; text-align: center; min-width: 38px; font-size: 10px; font-weight: 600; }
+
+  /* SCATTER */
+  .scatter-info { font-size: 11px; color: #888; margin-top: 6px; }
+
+  /* FOOTER */
+  .footer { background: #f8f9fc; border-top: 1px solid #e8eaf0; padding: 10px 28px; font-size: 11px; color: #aaa; display: flex; justify-content: space-between; margin-top: 20px; }
+
+  @media (max-width: 900px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .chart-grid-2, .chart-grid-3 { grid-template-columns: 1fr; }
+    .nav { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>📊 適正M/H 分析ダッシュボード</h1>
+    <p>2026年3月実績ベース ／ 対象20店舗 ／ 前提：有人接客60秒/人・FF300円・厨房600円</p>
+  </div>
+  <div class="header-badge">v3 最新データ</div>
+</div>
+
+<div class="nav">
+  <div class="nav-tab active" onclick="switchTab('overview')">📋 全体サマリー</div>
+  <div class="nav-tab" onclick="switchTab('mh')">⏱ MH過不足分析</div>
+  <div class="nav-tab" onclick="switchTab('hourly')">🕐 時間帯別MH</div>
+  <div class="nav-tab" onclick="switchTab('breakdown')">📦 業務内訳</div>
+  <div class="nav-tab" onclick="switchTab('ranking')">🏆 ランキング</div>
+</div>
+
+<div class="main">
+
+<!-- ============================================================ TAB1: 全体サマリー -->
+<div class="tab-content active" id="tab-overview">
+
+  <div class="kpi-grid">
+    <div class="kpi-card blue">
+      <div class="kpi-label">20店舗 総必要MH/日</div>
+      <div class="kpi-value">741.3<span class="kpi-unit">h</span></div>
+      <div class="kpi-sub">月間: 20,756h</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">20店舗 総実績MH/日</div>
+      <div class="kpi-value">771.6<span class="kpi-unit">h</span></div>
+      <div class="kpi-sub">月間: 21,605h</div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">MH過剰（実績－必要）</div>
+      <div class="kpi-value">+30.3<span class="kpi-unit">h/日</span></div>
+      <div class="kpi-sub">月間 +848h 超過</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">MH過剰 推定金額（月）</div>
+      <div class="kpi-value">153.5<span class="kpi-unit">万円</span></div>
+      <div class="kpi-sub">＠1,300円換算</div>
+    </div>
+  </div>
+
+  <div class="chart-grid-2">
+    <div class="chart-box">
+      <div class="section-title">必要MH vs 実績MH（全店舗）</div>
+      <canvas id="chartSummaryBar"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="section-title">MH過不足（実績－必要）</div>
+      <canvas id="chartDiff"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-grid-2">
+    <div class="chart-box">
+      <div class="section-title">固定MH vs 変動MH（必要MH内訳）</div>
+      <canvas id="chartFixedVar"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="section-title">セルフレジ率（客数比）</div>
+      <canvas id="chartSelfRate"></canvas>
+    </div>
+  </div>
+
+  <div class="section-title">全店舗 サマリー一覧</div>
+  <div class="table-wrap">
+    <table id="summaryTable"></table>
+  </div>
+
+</div>
+
+<!-- ============================================================ TAB2: MH過不足分析 -->
+<div class="tab-content" id="tab-mh">
+
+  <div class="kpi-grid">
+    <div class="kpi-card red">
+      <div class="kpi-label">MH超過店舗数</div>
+      <div class="kpi-value" id="kpiOver">-</div>
+      <div class="kpi-sub">実績＞必要</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">MH不足店舗数</div>
+      <div class="kpi-value" id="kpiUnder">-</div>
+      <div class="kpi-sub">実績＜必要</div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">最大超過</div>
+      <div class="kpi-value" id="kpiMaxOver">-</div>
+      <div class="kpi-sub" id="kpiMaxOverStore">-</div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">最大不足</div>
+      <div class="kpi-value" id="kpiMaxUnder">-</div>
+      <div class="kpi-sub" id="kpiMaxUnderStore">-</div>
+    </div>
+  </div>
+
+  <div id="alertBoxes"></div>
+
+  <div class="chart-grid-2">
+    <div class="chart-box">
+      <div class="section-title">MH過不足（降順）</div>
+      <canvas id="chartDiffSorted"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="section-title">客数 vs 実績MH（散布図）</div>
+      <canvas id="chartScatter"></canvas>
+      <div class="scatter-info">● 各点が1店舗。横軸：総客数/日、縦軸：実績MH/日</div>
+    </div>
+  </div>
+
+  <div class="section-title">MH過不足 詳細テーブル</div>
+  <div class="table-wrap">
+    <table id="mhTable"></table>
+  </div>
+
+</div>
+
+<!-- ============================================================ TAB3: 時間帯別MH -->
+<div class="tab-content" id="tab-hourly">
+
+  <div class="store-select-wrap">
+    <label>📍 店舗選択：</label>
+    <select id="storeSelect" onchange="updateHourlyChart()"></select>
+  </div>
+
+  <div class="chart-grid-2">
+    <div class="chart-box">
+      <div class="section-title">時間帯別 必要レジMH</div>
+      <canvas id="chartHourly"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="section-title">時間帯別 客数分布</div>
+      <canvas id="chartHourlyCustomer"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-box full" style="margin-bottom: 20px;">
+    <div class="section-title">全店舗 時間帯別MH ヒートマップ</div>
+    <div class="heatmap-wrap" id="heatmapWrap"></div>
+  </div>
+
+</div>
+
+<!-- ============================================================ TAB4: 業務内訳 -->
+<div class="tab-content" id="tab-breakdown">
+
+  <div class="chart-grid-3">
+    <div class="chart-box" style="grid-column: span 2;">
+      <div class="section-title">業務別MH内訳（全店舗合計）</div>
+      <canvas id="chartBreakdownTotal"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="section-title">MH構成比（全体）</div>
+      <canvas id="chartPie"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-box full" style="margin-bottom: 20px;">
+    <div class="section-title">店舗別 業務MH積み上げ</div>
+    <canvas id="chartStackedBar" style="max-height:350px;"></canvas>
+  </div>
+
+  <div class="section-title">業務別MH内訳 詳細テーブル</div>
+  <div class="table-wrap">
+    <table id="breakdownTable"></table>
+  </div>
+
+</div>
+
+<!-- ============================================================ TAB5: ランキング -->
+<div class="tab-content" id="tab-ranking">
+
+  <div class="chart-grid-3">
+    <div class="chart-box">
+      <div class="section-title">🏆 総客数/日 ランキング</div>
+      <ul class="rank-list" id="rankCustomer"></ul>
+    </div>
+    <div class="chart-box">
+      <div class="section-title">🏆 必要MH ランキング</div>
+      <ul class="rank-list" id="rankMH"></ul>
+    </div>
+    <div class="chart-box">
+      <div class="section-title">🏆 MH効率（客数/MH）</div>
+      <ul class="rank-list" id="rankEfficiency"></ul>
+    </div>
+  </div>
+
+  <div class="chart-grid-2">
+    <div class="chart-box">
+      <div class="section-title">⚠️ MH超過額 上位（月間）</div>
+      <canvas id="chartCostRank"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="section-title">📈 セルフレジ活用率 ランキング</div>
+      <canvas id="chartSelfRank"></canvas>
+    </div>
+  </div>
+
+</div>
+
+</div><!-- /main -->
+
+<div class="footer">
+  <span>📊 適正MH算出シート v3 ／ 2026年3月実績ベース（0216〜0315）</span>
+  <span>ローソン エリアマネジャー統括管理ツール</span>
+</div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+const STORES = [
+  {"name":"江坂駅南口","total_customers":1819.8,"self_customers":519.1,"manned_customers":1301.0,"fixed_mh":38.5,"required_mh":58.1,"actual_mh":64.66,"patrol_mh":1.04,"diff_mh":5.52,"amount":200785,"qsc_mh":16,"register_mh":21.7,"ff_mh":6.1,"kitchen_mh":3.3,"cdc_mh":3.9,"ddc_mh":5.6,"fdc_mh":1.3},
+  {"name":"南金田二丁目","total_customers":981.2,"self_customers":160.2,"manned_customers":820.6,"fixed_mh":33.0,"required_mh":44.6,"actual_mh":47.67,"patrol_mh":2.42,"diff_mh":0.65,"amount":23660,"qsc_mh":16,"register_mh":13.6,"ff_mh":5.1,"kitchen_mh":1.9,"cdc_mh":3.0,"ddc_mh":3.7,"fdc_mh":1.1},
+  {"name":"新御堂筋上新田","total_customers":893.3,"self_customers":114.1,"manned_customers":779.0,"fixed_mh":31.7,"required_mh":42.6,"actual_mh":44.47,"patrol_mh":0.65,"diff_mh":1.22,"amount":44460,"qsc_mh":16,"register_mh":13.0,"ff_mh":4.1,"kitchen_mh":2.1,"cdc_mh":2.8,"ddc_mh":3.4,"fdc_mh":1.0},
+  {"name":"豊中服部元町一丁目","total_customers":819.9,"self_customers":91.7,"manned_customers":728.2,"fixed_mh":30.1,"required_mh":40.1,"actual_mh":41.06,"patrol_mh":0.78,"diff_mh":0.19,"amount":6760,"qsc_mh":16,"register_mh":12.1,"ff_mh":3.6,"kitchen_mh":2.0,"cdc_mh":2.4,"ddc_mh":2.9,"fdc_mh":0.9},
+  {"name":"江坂東","total_customers":898.5,"self_customers":218.6,"manned_customers":679.5,"fixed_mh":30.7,"required_mh":40.0,"actual_mh":39.35,"patrol_mh":1.97,"diff_mh":-2.63,"amount":-95550,"qsc_mh":16,"register_mh":11.3,"ff_mh":3.9,"kitchen_mh":2.1,"cdc_mh":2.5,"ddc_mh":3.0,"fdc_mh":1.0},
+  {"name":"吹田朝日町","total_customers":990.0,"self_customers":358.0,"manned_customers":632.0,"fixed_mh":31.3,"required_mh":39.7,"actual_mh":39.22,"patrol_mh":0.61,"diff_mh":-1.08,"amount":-39455,"qsc_mh":16,"register_mh":10.5,"ff_mh":4.1,"kitchen_mh":2.5,"cdc_mh":2.5,"ddc_mh":2.9,"fdc_mh":1.0},
+  {"name":"豊中利倉東一丁目","total_customers":794.9,"self_customers":157.0,"manned_customers":638.1,"fixed_mh":30.4,"required_mh":39.0,"actual_mh":37.72,"patrol_mh":1.04,"diff_mh":-2.32,"amount":-84500,"qsc_mh":16,"register_mh":10.6,"ff_mh":4.2,"kitchen_mh":1.7,"cdc_mh":2.1,"ddc_mh":3.3,"fdc_mh":0.9},
+  {"name":"吹田青山台三丁目","total_customers":732.4,"self_customers":142.4,"manned_customers":590.0,"fixed_mh":31.1,"required_mh":38.8,"actual_mh":42.67,"patrol_mh":3.66,"diff_mh":0.21,"amount":7605,"qsc_mh":16,"register_mh":9.8,"ff_mh":4.1,"kitchen_mh":2.5,"cdc_mh":2.4,"ddc_mh":2.8,"fdc_mh":1.0},
+  {"name":"東淀川豊里五丁目","total_customers":742.5,"self_customers":219.2,"manned_customers":523.6,"fixed_mh":31.3,"required_mh":38.0,"actual_mh":39.16,"patrol_mh":0.48,"diff_mh":0.68,"amount":24700,"qsc_mh":16,"register_mh":8.7,"ff_mh":4.0,"kitchen_mh":2.4,"cdc_mh":2.3,"ddc_mh":3.4,"fdc_mh":1.0},
+  {"name":"箕面白島二丁目","total_customers":710.8,"self_customers":142.6,"manned_customers":568.1,"fixed_mh":30.2,"required_mh":37.6,"actual_mh":41.22,"patrol_mh":0.77,"diff_mh":2.86,"amount":103935,"qsc_mh":16,"register_mh":9.5,"ff_mh":4.3,"kitchen_mh":2.1,"cdc_mh":2.0,"ddc_mh":2.6,"fdc_mh":0.9},
+  {"name":"吹田豊津中学校前","total_customers":765.0,"self_customers":144.3,"manned_customers":620.8,"fixed_mh":29.2,"required_mh":37.5,"actual_mh":35.95,"patrol_mh":0.67,"diff_mh":-2.22,"amount":-80925,"qsc_mh":16,"register_mh":10.3,"ff_mh":3.3,"kitchen_mh":2.0,"cdc_mh":2.4,"ddc_mh":2.5,"fdc_mh":0.8},
+  {"name":"豊中原田南一丁目","total_customers":602.4,"self_customers":56.8,"manned_customers":545.4,"fixed_mh":28.7,"required_mh":35.8,"actual_mh":32.69,"patrol_mh":0.51,"diff_mh":-3.62,"amount":-131820,"qsc_mh":16,"register_mh":9.1,"ff_mh":3.4,"kitchen_mh":2.0,"cdc_mh":1.7,"ddc_mh":2.6,"fdc_mh":0.8},
+  {"name":"大道南一丁目","total_customers":550.1,"self_customers":36.0,"manned_customers":514.0,"fixed_mh":27.7,"required_mh":34.2,"actual_mh":37.9,"patrol_mh":3.17,"diff_mh":0.53,"amount":19370,"qsc_mh":16,"register_mh":8.6,"ff_mh":3.1,"kitchen_mh":1.4,"cdc_mh":1.5,"ddc_mh":2.7,"fdc_mh":0.7},
+  {"name":"東淀川大道南","total_customers":629.1,"self_customers":153.8,"manned_customers":474.9,"fixed_mh":28.4,"required_mh":34.3,"actual_mh":35.78,"patrol_mh":0.71,"diff_mh":0.77,"amount":28080,"qsc_mh":16,"register_mh":7.9,"ff_mh":3.3,"kitchen_mh":1.7,"cdc_mh":1.7,"ddc_mh":2.7,"fdc_mh":0.8},
+  {"name":"吹田警察署前","total_customers":581.6,"self_customers":99.3,"manned_customers":482.5,"fixed_mh":27.2,"required_mh":33.1,"actual_mh":36.12,"patrol_mh":3.78,"diff_mh":-0.76,"amount":-27690,"qsc_mh":16,"register_mh":8.0,"ff_mh":2.8,"kitchen_mh":1.4,"cdc_mh":1.8,"ddc_mh":2.3,"fdc_mh":0.6},
+  {"name":"豊中服部西町三丁目","total_customers":557.8,"self_customers":65.6,"manned_customers":492.3,"fixed_mh":25.1,"required_mh":31.2,"actual_mh":32.6,"patrol_mh":0.46,"diff_mh":0.93,"amount":33995,"qsc_mh":16,"register_mh":8.2,"ff_mh":2.8,"kitchen_mh":0.0,"cdc_mh":1.5,"ddc_mh":2.0,"fdc_mh":0.5},
+  {"name":"池田市役所前","total_customers":602.0,"self_customers":144.8,"manned_customers":457.0,"fixed_mh":24.2,"required_mh":29.8,"actual_mh":33.79,"patrol_mh":1.06,"diff_mh":2.93,"amount":106730,"qsc_mh":16,"register_mh":7.6,"ff_mh":2.0,"kitchen_mh":0.0,"cdc_mh":1.9,"ddc_mh":1.7,"fdc_mh":0.4},
+  {"name":"五月ケ丘東","total_customers":475.4,"self_customers":47.1,"manned_customers":428.5,"fixed_mh":24.6,"required_mh":29.6,"actual_mh":30.84,"patrol_mh":0.77,"diff_mh":0.47,"amount":17160,"qsc_mh":16,"register_mh":7.1,"ff_mh":1.9,"kitchen_mh":0.6,"cdc_mh":1.2,"ddc_mh":2.2,"fdc_mh":0.4},
+  {"name":"豊里六丁目","total_customers":501.2,"self_customers":54.1,"manned_customers":447.1,"fixed_mh":23.9,"required_mh":29.3,"actual_mh":30.83,"patrol_mh":0.54,"diff_mh":0.99,"amount":36205,"qsc_mh":16,"register_mh":7.5,"ff_mh":1.6,"kitchen_mh":0.0,"cdc_mh":1.3,"ddc_mh":2.4,"fdc_mh":0.3},
+  {"name":"吹田垂水三丁目","total_customers":492.7,"self_customers":102.6,"manned_customers":390.0,"fixed_mh":23.6,"required_mh":28.0,"actual_mh":27.86,"patrol_mh":0.96,"diff_mh":-1.1,"amount":-39975,"qsc_mh":16,"register_mh":6.5,"ff_mh":1.8,"kitchen_mh":0.0,"cdc_mh":1.5,"ddc_mh":1.7,"fdc_mh":0.3}
+];
+
+const HOURLY_MH = {
+  "江坂駅南口":[0.41,0.19,0.14,0.09,0.07,0.2,0.69,1.33,2.13,1.53,0.88,0.83,1.18,1.06,0.85,0.91,0.86,1.06,1.36,1.31,1.41,1.28,1.08,0.83],
+  "南金田二丁目":[0.18,0.11,0.07,0.08,0.08,0.18,0.56,0.96,1.14,0.64,0.64,0.7,1.24,0.71,0.68,0.63,0.63,0.8,0.93,0.77,0.63,0.59,0.4,0.3],
+  "新御堂筋上新田":[0.19,0.15,0.09,0.05,0.08,0.19,0.39,0.84,0.93,0.71,0.6,0.72,0.97,0.69,0.67,0.71,0.73,0.99,0.86,0.62,0.63,0.48,0.43,0.26],
+  "豊中服部元町一丁目":[0.33,0.11,0.09,0.07,0.1,0.15,0.36,0.6,0.79,0.6,0.48,0.6,0.8,0.54,0.54,0.51,0.62,0.82,0.9,0.81,0.73,0.64,0.53,0.4],
+  "江坂東":[0.21,0.08,0.07,0.04,0.05,0.13,0.25,0.58,1.03,0.5,0.42,0.52,1.02,0.6,0.44,0.44,0.43,0.68,0.81,0.79,0.7,0.63,0.57,0.35],
+  "豊中利倉東一丁目":[0.11,0.09,0.06,0.06,0.1,0.2,0.76,1.06,0.81,0.46,0.43,0.56,0.84,0.5,0.52,0.53,0.47,0.67,0.68,0.5,0.5,0.34,0.21,0.17],
+  "吹田朝日町":[0.33,0.07,0.06,0.06,0.03,0.09,0.21,0.32,0.49,0.55,0.45,0.64,0.76,0.66,0.59,0.59,0.54,0.68,0.84,0.64,0.54,0.55,0.49,0.35],
+  "吹田豊津中学校前":[0.18,0.06,0.04,0.04,0.02,0.05,0.17,0.59,1.0,0.51,0.37,0.58,1.35,0.51,0.45,0.44,0.45,0.54,0.75,0.63,0.55,0.45,0.37,0.24],
+  "吹田青山台三丁目":[0.09,0.05,0.03,0.04,0.04,0.12,0.3,0.69,0.77,0.6,0.56,0.6,0.98,0.53,0.56,0.53,0.56,0.59,0.51,0.46,0.41,0.38,0.25,0.18],
+  "箕面白島二丁目":[0.12,0.05,0.03,0.04,0.05,0.14,0.28,0.58,0.85,0.62,0.52,0.59,0.98,0.58,0.52,0.51,0.54,0.7,0.77,0.7,0.64,0.6,0.44,0.3],
+  "豊中原田南一丁目":[0.1,0.06,0.07,0.04,0.05,0.1,0.28,0.57,0.71,0.53,0.5,0.57,0.75,0.56,0.5,0.49,0.53,0.62,0.67,0.58,0.54,0.46,0.36,0.26],
+  "東淀川豊里五丁目":[0.13,0.06,0.04,0.03,0.04,0.11,0.26,0.43,0.65,0.51,0.46,0.53,0.74,0.47,0.45,0.47,0.46,0.58,0.65,0.58,0.51,0.46,0.37,0.23],
+  "大道南一丁目":[0.15,0.08,0.08,0.05,0.07,0.15,0.41,0.51,0.55,0.37,0.38,0.45,0.64,0.43,0.41,0.44,0.48,0.59,0.53,0.48,0.38,0.33,0.27,0.19],
+  "豊中服部西町三丁目":[0.13,0.07,0.05,0.04,0.06,0.12,0.31,0.47,0.68,0.55,0.47,0.55,0.74,0.49,0.48,0.48,0.52,0.62,0.68,0.59,0.52,0.46,0.34,0.25],
+  "吹田警察署前":[0.08,0.04,0.03,0.04,0.05,0.12,0.31,0.8,0.73,0.36,0.33,0.41,0.96,0.42,0.39,0.43,0.43,0.43,0.47,0.36,0.26,0.22,0.18,0.12],
+  "東淀川大道南":[0.13,0.09,0.06,0.06,0.05,0.12,0.33,0.43,0.49,0.36,0.36,0.4,0.54,0.4,0.39,0.43,0.44,0.52,0.5,0.42,0.35,0.31,0.25,0.17],
+  "池田市役所前":[0.13,0.02,0.02,0.02,0.03,0.08,0.23,0.52,0.68,0.4,0.34,0.41,0.68,0.39,0.35,0.36,0.39,0.48,0.51,0.49,0.45,0.39,0.27,0.16],
+  "五月ケ丘東":[0.11,0.06,0.06,0.07,0.05,0.12,0.25,0.39,0.49,0.35,0.31,0.39,0.44,0.36,0.36,0.37,0.36,0.47,0.47,0.43,0.35,0.31,0.27,0.2],
+  "豊里六丁目":[0.15,0.1,0.07,0.07,0.05,0.1,0.18,0.41,0.54,0.42,0.39,0.49,0.57,0.41,0.39,0.41,0.44,0.52,0.56,0.5,0.43,0.38,0.28,0.19],
+  "吹田垂水三丁目":[0.11,0.06,0.04,0.03,0.03,0.05,0.16,0.37,0.55,0.32,0.26,0.36,0.77,0.35,0.35,0.36,0.36,0.37,0.51,0.49,0.44,0.46,0.35,0.22]
+};
+
+const HOURLY_CUSTOMER = {
+  // ③時間帯別客数シート 全20店舗
+  "五月ケ丘東":      [8.3,6.2,4.2,6.1,3.7,8.4,17.7,27.9,33.9,22.8,21.3,25.1,30.2,24.5,23.4,23.7,22.6,30.9,30.3,28.2,22.6,21.0,18.7,13.7],
+  "南金田二丁目":    [17.5,10.1,6.1,7.7,6.5,13.6,36.9,65.3,81.3,43.5,44.2,49.5,83.7,50.2,48.5,43.6,43.4,55.3,65.5,56.7,47.1,43.7,33.4,27.9],
+  "吹田垂水三丁目":  [10.2,5.5,3.9,2.8,2.1,3.1,11.5,25.9,37.0,21.5,16.5,23.3,49.5,22.0,22.3,23.5,23.9,24.3,33.4,32.7,28.9,30.7,23.5,14.7],
+  "吹田朝日町":      [32.0,8.2,7.8,6.6,5.5,15.4,23.8,35.0,52.1,50.0,39.5,53.2,72.6,59.2,50.2,50.9,47.9,59.8,72.8,56.8,47.0,50.6,50.1,43.0],
+  "吹田警察署前":    [7.2,4.0,3.0,3.2,3.7,8.9,22.3,58.1,50.9,26.5,25.2,30.8,69.0,31.1,28.7,30.8,30.7,31.0,33.5,26.3,18.8,16.1,12.9,8.9],
+  "吹田豊津中学校前":[14.9,5.0,3.6,3.3,1.5,3.9,13.6,48.2,74.5,39.1,26.9,39.4,88.1,38.5,34.4,34.0,32.8,38.3,53.2,45.8,41.1,35.2,28.7,21.0],
+  "吹田青山台三丁目":[11.3,5.7,3.1,4.3,4.5,9.8,22.5,43.7,52.9,42.3,38.6,41.7,61.9,41.0,42.9,41.3,43.6,43.5,38.1,36.5,32.5,31.7,23.5,15.5],
+  "大道南一丁目":    [9.7,5.8,5.1,5.3,4.1,10.8,30.1,38.8,33.1,22.8,22.5,28.9,36.3,28.1,25.5,29.9,31.6,38.7,35.1,32.3,24.9,21.2,17.8,11.7],
+  "新御堂筋上新田":  [15.0,11.0,6.6,4.0,6.0,13.1,25.1,55.5,62.2,48.7,42.5,48.3,64.1,47.5,47.7,48.6,50.6,64.9,57.6,43.7,44.8,34.7,32.1,19.0],
+  // 以下、時間帯別MHデータから逆算（有人客数/日 ÷ 60人/h × 時間帯比率）
+  "江坂駅南口":      [32.8,15.2,11.2,7.2,5.6,16.0,55.2,106.4,170.4,122.4,70.4,66.4,94.4,84.8,68.0,72.8,68.8,84.8,108.8,104.8,112.8,102.4,86.4,66.4],
+  "豊中服部元町一丁目":[26.4,8.8,7.2,5.6,8.0,12.0,28.8,48.0,63.2,48.0,38.4,48.0,64.0,43.2,43.2,40.8,49.6,65.6,72.0,64.8,58.4,51.2,42.4,32.0],
+  "江坂東":          [19.2,7.2,6.4,3.6,4.5,11.7,22.5,52.2,92.7,45.0,37.8,46.8,91.8,54.0,39.6,39.6,38.7,61.2,72.9,71.1,63.0,56.7,51.3,31.5],
+  "豊中利倉東一丁目":[9.9,8.1,5.4,5.4,9.0,18.0,68.4,95.4,72.9,41.4,38.7,50.4,75.6,45.0,46.8,47.7,42.3,60.3,61.2,45.0,45.0,30.6,18.9,15.3],
+  "東淀川豊里五丁目":[13.0,6.0,4.0,3.0,4.0,11.0,26.0,43.0,65.0,51.0,46.0,53.0,74.0,47.0,45.0,47.0,46.0,58.0,65.0,58.0,51.0,46.0,37.0,23.0],
+  "箕面白島二丁目":  [11.4,4.8,2.9,3.8,4.8,13.3,26.7,55.2,81.0,59.0,49.5,56.2,93.3,55.2,49.5,48.6,51.4,66.7,73.3,66.7,61.0,57.1,41.9,28.6],
+  "豊中原田南一丁目":[9.1,5.5,6.4,3.6,4.5,9.1,25.5,52.0,64.6,48.2,45.5,51.9,68.3,51.0,45.5,44.6,48.2,56.5,61.0,52.8,49.1,41.9,32.8,23.7],
+  "東淀川大道南":    [12.3,8.5,5.7,5.7,4.7,11.4,31.4,41.0,46.7,34.3,34.3,38.1,51.5,38.1,37.2,41.0,41.9,49.6,47.7,40.0,33.4,29.5,23.8,16.2],
+  "豊中服部西町三丁目":[12.0,6.5,4.6,3.7,5.6,11.1,28.7,43.5,62.9,50.9,43.5,50.9,68.5,45.4,44.4,44.4,48.1,57.4,62.9,54.6,48.1,42.6,31.5,23.1],
+  "池田市役所前":    [11.8,1.8,1.8,1.8,2.7,7.3,20.9,47.3,61.8,36.4,30.9,37.3,61.8,35.5,31.8,32.7,35.5,43.6,46.4,44.5,40.9,35.5,24.5,14.5],
+  "豊里六丁目":      [13.5,9.0,6.3,6.3,4.5,9.0,16.2,36.9,48.6,37.8,35.1,44.1,51.3,36.9,35.1,36.9,39.6,46.8,50.4,45.0,38.7,34.2,25.2,17.1]
+};
+
+const HOURS = ['0時','1時','2時','3時','4時','5時','6時','7時','8時','9時','10時','11時','12時','13時','14時','15時','16時','17時','18時','19時','20時','21時','22時','23時'];
+const STORE_NAMES = STORES.map(s => s.name);
+
+let charts = {};
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+// ============================================================
+// TAB1 CHARTS
+// ============================================================
+function buildTab1() {
+  const names = STORES.map(s => s.name.replace(/一丁目|二丁目|三丁目|四丁目|五丁目|六丁目/g, '').slice(0, 8));
+
+  destroyChart('chartSummaryBar');
+  charts['chartSummaryBar'] = new Chart(document.getElementById('chartSummaryBar'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [
+        { label: '必要MH', data: STORES.map(s=>s.required_mh), backgroundColor: '#3b82f6cc', borderColor: '#3b82f6', borderWidth: 1 },
+        { label: '実績MH', data: STORES.map(s=>s.actual_mh), backgroundColor: '#f59e0bcc', borderColor: '#f59e0b', borderWidth: 1 }
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { title: { display: true, text: 'MH/日' } } } }
+  });
+
+  destroyChart('chartDiff');
+  const diffData = STORES.map(s => s.diff_mh);
+  const diffColors = diffData.map(v => v > 1 ? '#ef4444cc' : v < -1 ? '#10b981cc' : '#f59e0bcc');
+  charts['chartDiff'] = new Chart(document.getElementById('chartDiff'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [{ label: '過不足MH', data: diffData, backgroundColor: diffColors, borderColor: diffColors.map(c=>c.replace('cc','')), borderWidth: 1 }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: { size: 9 } } }, y: { title: { display: true, text: 'MH/日' }, grid: { color: ctx => ctx.tick.value === 0 ? '#333' : '#eee' } } }
+    }
+  });
+
+  destroyChart('chartFixedVar');
+  charts['chartFixedVar'] = new Chart(document.getElementById('chartFixedVar'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [
+        { label: '固定MH(QSC)', data: STORES.map(s=>s.qsc_mh), backgroundColor: '#8b5cf6cc', stack: 'a' },
+        { label: 'レジMH', data: STORES.map(s=>s.register_mh), backgroundColor: '#3b82f6cc', stack: 'a' },
+        { label: 'FF作成', data: STORES.map(s=>s.ff_mh), backgroundColor: '#10b981cc', stack: 'a' },
+        { label: '厨房作成', data: STORES.map(s=>s.kitchen_mh), backgroundColor: '#f59e0bcc', stack: 'a' },
+        { label: '納品計', data: STORES.map(s=>s.cdc_mh+s.ddc_mh+s.fdc_mh), backgroundColor: '#ef4444cc', stack: 'a' },
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } }, scales: { x: { stacked: true, ticks: { font: { size: 9 } } }, y: { stacked: true } } }
+  });
+
+  destroyChart('chartSelfRate');
+  const selfRate = STORES.map(s => Math.round(s.self_customers/s.total_customers*100));
+  charts['chartSelfRate'] = new Chart(document.getElementById('chartSelfRate'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [{ label: 'セルフレジ率(%)', data: selfRate, backgroundColor: selfRate.map(v => v >= 30 ? '#10b981cc' : v >= 20 ? '#3b82f6cc' : '#f59e0bcc') }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 9 } } }, y: { max: 60, title: { display: true, text: '%' } } } }
+  });
+
+  // Summary table
+  const tbl = document.getElementById('summaryTable');
+  tbl.innerHTML = `<thead><tr>
+    <th>店舗名</th><th>総客数/日</th><th>セルフ率</th><th>固定MH</th><th>必要MH</th><th>実績MH</th><th>巡回MH</th><th>過不足</th><th>月間過不足額</th>
+  </tr></thead><tbody>` + STORES.map(s => {
+    const sr = Math.round(s.self_customers/s.total_customers*100);
+    const diff = s.diff_mh;
+    const cls = diff > 1 ? 'diff-pos' : diff < -1 ? 'diff-neg' : 'diff-zero';
+    const sign = diff > 0 ? '+' : '';
+    const badge = diff > 1 ? '<span class="badge badge-over">超過</span>' : diff < -1 ? '<span class="badge badge-under">不足</span>' : '<span class="badge badge-ok">適正</span>';
+    const amtStr = s.amount >= 0 ? `+${s.amount.toLocaleString()}円` : `${s.amount.toLocaleString()}円`;
+    return `<tr>
+      <td>${s.name}</td>
+      <td>${s.total_customers}</td>
+      <td>${sr}%</td>
+      <td>${s.fixed_mh}h</td>
+      <td>${s.required_mh}h</td>
+      <td>${s.actual_mh}h</td>
+      <td>${s.patrol_mh}h</td>
+      <td class="${cls}">${sign}${diff}h ${badge}</td>
+      <td class="${cls}">${amtStr}</td>
+    </tr>`;
+  }).join('') + '</tbody>';
+}
+
+// ============================================================
+// TAB2 CHARTS
+// ============================================================
+function buildTab2() {
+  const over = STORES.filter(s=>s.diff_mh > 1);
+  const under = STORES.filter(s=>s.diff_mh < -1);
+  document.getElementById('kpiOver').textContent = over.length + '店';
+  document.getElementById('kpiUnder').textContent = under.length + '店';
+
+  const maxOver = [...STORES].sort((a,b)=>b.diff_mh-a.diff_mh)[0];
+  const maxUnder = [...STORES].sort((a,b)=>a.diff_mh-b.diff_mh)[0];
+  document.getElementById('kpiMaxOver').textContent = '+' + maxOver.diff_mh + 'h';
+  document.getElementById('kpiMaxOverStore').textContent = maxOver.name;
+  document.getElementById('kpiMaxUnder').textContent = maxUnder.diff_mh + 'h';
+  document.getElementById('kpiMaxUnderStore').textContent = maxUnder.name;
+
+  // Alert boxes
+  const ab = document.getElementById('alertBoxes');
+  if (over.length > 0) {
+    ab.innerHTML = `<div class="alert-box"><h4>⚠️ MH超過店舗（実績が必要MHを1h以上超過）</h4>` +
+      over.map(s=>`<div class="alert-row"><span>${s.name}</span><span class="diff-pos">+${s.diff_mh}h / 月${s.amount.toLocaleString()}円</span></div>`).join('') +
+      `</div>`;
+  }
+
+  const sorted = [...STORES].sort((a,b)=>b.diff_mh-a.diff_mh);
+  destroyChart('chartDiffSorted');
+  charts['chartDiffSorted'] = new Chart(document.getElementById('chartDiffSorted'), {
+    type: 'bar',
+    data: {
+      labels: sorted.map(s=>s.name.slice(0,8)),
+      datasets: [{ label: '過不足MH', data: sorted.map(s=>s.diff_mh),
+        backgroundColor: sorted.map(s=>s.diff_mh>1?'#ef4444cc':s.diff_mh<-1?'#10b981cc':'#f59e0bcc') }]
+    },
+    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } },
+      scales: { x: { title: { display: true, text: 'MH/日' } } } }
+  });
+
+  destroyChart('chartScatter');
+  charts['chartScatter'] = new Chart(document.getElementById('chartScatter'), {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        label: '店舗',
+        data: STORES.map(s=>({ x: s.total_customers, y: s.actual_mh, name: s.name })),
+        backgroundColor: STORES.map(s=>s.diff_mh>1?'#ef4444cc':s.diff_mh<-1?'#10b981cc':'#3b82f6cc'),
+        pointRadius: 7
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `${ctx.raw.name}: 客数${ctx.raw.x} / MH${ctx.raw.y}h` } }
+      },
+      scales: {
+        x: { title: { display: true, text: '総客数/日' } },
+        y: { title: { display: true, text: '実績MH/日' } }
+      }
+    }
+  });
+
+  // MH table
+  const tbl = document.getElementById('mhTable');
+  const sortedByDiff = [...STORES].sort((a,b)=>b.diff_mh-a.diff_mh);
+  tbl.innerHTML = `<thead><tr>
+    <th>店舗名</th><th>必要MH/日</th><th>実績MH/日</th><th>差分(h)</th><th>判定</th><th>月間推定費用差</th>
+  </tr></thead><tbody>` + sortedByDiff.map(s => {
+    const diff = s.diff_mh;
+    const cls = diff > 1 ? 'diff-pos' : diff < -1 ? 'diff-neg' : 'diff-zero';
+    const badge = diff > 1 ? '<span class="badge badge-over">超過</span>' : diff < -1 ? '<span class="badge badge-under">不足</span>' : '<span class="badge badge-ok">適正</span>';
+    const sign = diff > 0 ? '+' : '';
+    const amtSign = s.amount >= 0 ? '+' : '';
+    return `<tr>
+      <td>${s.name}</td>
+      <td>${s.required_mh}h</td>
+      <td>${s.actual_mh}h</td>
+      <td class="${cls}">${sign}${diff}h</td>
+      <td>${badge}</td>
+      <td class="${cls}">${amtSign}${s.amount.toLocaleString()}円</td>
+    </tr>`;
+  }).join('') + '</tbody>';
+}
+
+// ============================================================
+// TAB3 CHARTS
+// ============================================================
+function buildTab3() {
+  const sel = document.getElementById('storeSelect');
+  sel.innerHTML = '';
+  Object.keys(HOURLY_MH).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    sel.appendChild(opt);
+  });
+  updateHourlyChart();
+  buildHeatmap();
+}
+
+function updateHourlyChart() {
+  const store = document.getElementById('storeSelect').value;
+  const mhData = HOURLY_MH[store] || [];
+  const custData = HOURLY_CUSTOMER[store] || [];
+
+  destroyChart('chartHourly');
+  charts['chartHourly'] = new Chart(document.getElementById('chartHourly'), {
+    type: 'bar',
+    data: {
+      labels: HOURS,
+      datasets: [{
+        label: '必要レジMH',
+        data: mhData,
+        backgroundColor: mhData.map(v => v >= 1.5 ? '#ef4444cc' : v >= 1.0 ? '#f59e0bcc' : '#3b82f6cc'),
+        borderWidth: 1
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: { size: 10 } } }, y: { title: { display: true, text: 'MH' } } } }
+  });
+
+  destroyChart('chartHourlyCustomer');
+  const cChart = document.getElementById('chartHourlyCustomer');
+  // タイトルを常にリセット
+  const custTitle = cChart.parentElement.querySelector('.section-title');
+  custTitle.textContent = '時間帯別 客数分布';
+
+  charts['chartHourlyCustomer'] = new Chart(cChart, {
+    type: 'line',
+    data: {
+      labels: HOURS,
+      datasets: [{ label: '客数/時', data: custData, borderColor: '#8b5cf6', backgroundColor: '#8b5cf622', fill: true, tension: 0.4, pointRadius: 3 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: { size: 10 } } }, y: { title: { display: true, text: '人' }, beginAtZero: true } } }
+  });
+}
+
+function buildHeatmap() {
+  const wrap = document.getElementById('heatmapWrap');
+  const storeNames = Object.keys(HOURLY_MH);
+  const allValues = storeNames.flatMap(n => HOURLY_MH[n]);
+  const maxVal = Math.max(...allValues);
+
+  let html = '<table class="heatmap-table"><thead><tr><th>店舗名</th>';
+  HOURS.forEach(h => html += `<th>${h}</th>`);
+  html += '</tr></thead><tbody>';
+
+  storeNames.forEach(name => {
+    html += `<tr><td style="padding:4px 8px;font-weight:600;white-space:nowrap;font-size:11px;">${name}</td>`;
+    HOURLY_MH[name].forEach(v => {
+      const intensity = v / maxVal;
+      const r = Math.round(59 + (231-59)*intensity);
+      const g = Math.round(130 - 130*intensity*0.8);
+      const b = Math.round(246 - 246*intensity*0.9);
+      const textColor = intensity > 0.5 ? '#fff' : '#333';
+      html += `<td style="background:rgb(${r},${g},${b});color:${textColor};">${v}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+// ============================================================
+// TAB4 CHARTS
+// ============================================================
+function buildTab4() {
+  const totals = {
+    qsc: STORES.reduce((a,s)=>a+s.qsc_mh,0).toFixed(1),
+    register: STORES.reduce((a,s)=>a+s.register_mh,0).toFixed(1),
+    ff: STORES.reduce((a,s)=>a+s.ff_mh,0).toFixed(1),
+    kitchen: STORES.reduce((a,s)=>a+s.kitchen_mh,0).toFixed(1),
+    delivery: STORES.reduce((a,s)=>a+s.cdc_mh+s.ddc_mh+s.fdc_mh,0).toFixed(1)
+  };
+
+  const labels = ['前陳・清掃(QSC)', 'レジ', 'FF作成', '厨房作成', '納品業務'];
+  const data = [totals.qsc, totals.register, totals.ff, totals.kitchen, totals.delivery];
+  const colors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ef4444'];
+
+  destroyChart('chartBreakdownTotal');
+  charts['chartBreakdownTotal'] = new Chart(document.getElementById('chartBreakdownTotal'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: colors.map(c=>c+'cc'), borderColor: colors, borderWidth: 1 }] },
+    options: { responsive: true, plugins: { legend: { display: false } },
+      scales: { y: { title: { display: true, text: 'MH/日（全店合計）' } } } }
+  });
+
+  destroyChart('chartPie');
+  charts['chartPie'] = new Chart(document.getElementById('chartPie'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors.map(c=>c+'cc') }] },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } }
+  });
+
+  const names = STORES.map(s=>s.name.slice(0,8));
+  destroyChart('chartStackedBar');
+  charts['chartStackedBar'] = new Chart(document.getElementById('chartStackedBar'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [
+        { label: '前陳・清掃', data: STORES.map(s=>s.qsc_mh), backgroundColor: '#8b5cf6cc', stack: 'a' },
+        { label: 'レジ', data: STORES.map(s=>s.register_mh), backgroundColor: '#3b82f6cc', stack: 'a' },
+        { label: 'FF作成', data: STORES.map(s=>s.ff_mh), backgroundColor: '#10b981cc', stack: 'a' },
+        { label: '厨房作成', data: STORES.map(s=>s.kitchen_mh), backgroundColor: '#f59e0bcc', stack: 'a' },
+        { label: 'CDC納品', data: STORES.map(s=>s.cdc_mh), backgroundColor: '#ef4444cc', stack: 'a' },
+        { label: 'DDC納品', data: STORES.map(s=>s.ddc_mh), backgroundColor: '#f87171cc', stack: 'a' },
+        { label: 'FDC納品', data: STORES.map(s=>s.fdc_mh), backgroundColor: '#fca5a5cc', stack: 'a' },
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } },
+      scales: { x: { stacked: true, ticks: { font: { size: 9 } } }, y: { stacked: true, title: { display: true, text: 'MH/日' } } } }
+  });
+
+  const tbl = document.getElementById('breakdownTable');
+  tbl.innerHTML = `<thead><tr>
+    <th>店舗名</th><th>前陳・清掃</th><th>レジMH</th><th>FF作成</th><th>厨房作成</th><th>CDC</th><th>DDC</th><th>FDC</th><th>合計必要MH</th>
+  </tr></thead><tbody>` + STORES.map(s=>`<tr>
+    <td>${s.name}</td>
+    <td>${s.qsc_mh}h</td><td>${s.register_mh}h</td><td>${s.ff_mh}h</td><td>${s.kitchen_mh}h</td>
+    <td>${s.cdc_mh}h</td><td>${s.ddc_mh}h</td><td>${s.fdc_mh}h</td>
+    <td><strong>${s.required_mh}h</strong></td>
+  </tr>`).join('') + '</tbody>';
+}
+
+// ============================================================
+// TAB5 CHARTS
+// ============================================================
+function buildRankList(elId, sorted, valueGetter, unit, colorFn) {
+  const el = document.getElementById(elId);
+  const max = valueGetter(sorted[0]);
+  el.innerHTML = sorted.map((s,i) => {
+    const val = valueGetter(s);
+    const pct = Math.round(val/max*100);
+    const numCls = i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-other';
+    return `<li class="rank-item">
+      <div class="rank-num ${numCls}">${i+1}</div>
+      <div class="rank-name">${s.name.slice(0,10)}</div>
+      <div class="rank-bar-wrap"><div class="rank-bar" style="width:${pct}%;background:${colorFn(val)}"></div></div>
+      <div class="rank-val">${val}${unit}</div>
+    </li>`;
+  }).join('');
+}
+
+function buildTab5() {
+  const byCustomer = [...STORES].sort((a,b)=>b.total_customers-a.total_customers);
+  buildRankList('rankCustomer', byCustomer, s=>s.total_customers, '人', ()=>'#3b82f6');
+
+  const byMH = [...STORES].sort((a,b)=>b.required_mh-a.required_mh);
+  buildRankList('rankMH', byMH, s=>s.required_mh, 'h', ()=>'#8b5cf6');
+
+  const withEff = STORES.map(s=>({...s, efficiency: Math.round(s.total_customers/s.actual_mh*10)/10}));
+  const byEff = [...withEff].sort((a,b)=>b.efficiency-a.efficiency);
+  buildRankList('rankEfficiency', byEff, s=>s.efficiency, '人/h', v=>v>=30?'#10b981':v>=25?'#3b82f6':'#f59e0b');
+
+  // Cost ranking
+  const overStores = [...STORES].filter(s=>s.amount>0).sort((a,b)=>b.amount-a.amount);
+  destroyChart('chartCostRank');
+  charts['chartCostRank'] = new Chart(document.getElementById('chartCostRank'), {
+    type: 'bar',
+    data: {
+      labels: overStores.map(s=>s.name.slice(0,8)),
+      datasets: [{ label: '月間超過額', data: overStores.map(s=>s.amount/10000), backgroundColor: '#ef4444cc' }]
+    },
+    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } },
+      scales: { x: { title: { display: true, text: '万円' } } } }
+  });
+
+  // Self rate ranking
+  const withSelf = [...STORES].map(s=>({...s, selfRate: Math.round(s.self_customers/s.total_customers*100)}));
+  const bySelf = withSelf.sort((a,b)=>b.selfRate-a.selfRate);
+  destroyChart('chartSelfRank');
+  charts['chartSelfRank'] = new Chart(document.getElementById('chartSelfRank'), {
+    type: 'bar',
+    data: {
+      labels: bySelf.map(s=>s.name.slice(0,8)),
+      datasets: [{ label: 'セルフレジ率', data: bySelf.map(s=>s.selfRate),
+        backgroundColor: bySelf.map(s=>s.selfRate>=30?'#10b981cc':s.selfRate>=20?'#3b82f6cc':'#f59e0bcc') }]
+    },
+    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } },
+      scales: { x: { max: 60, title: { display: true, text: '%' } } } }
+  });
+}
+
+// ============================================================
+// TAB SWITCH
+// ============================================================
+const tabBuilders = { overview: buildTab1, mh: buildTab2, hourly: buildTab3, breakdown: buildTab4, ranking: buildTab5 };
+const tabBuilt = {};
+
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tabId).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (!tabBuilt[tabId]) { tabBuilders[tabId](); tabBuilt[tabId] = true; }
+}
+
+// Init
+buildTab1(); tabBuilt['overview'] = true;
+</script>
+</body>
+</html>
